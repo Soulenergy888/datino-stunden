@@ -17,6 +17,7 @@ DB_PATH = os.environ.get('DB_PATH', 'stunden.db')
 # ── Mitarbeiter-Liste ───────────────────────────────────────────────────────
 # Initiale Mitarbeiter-Liste (wird nur beim ersten Start in DB geschrieben)
 MITARBEITER_INITIAL = [
+    # Aktive Mitarbeiter
     "Anxhela Kuci",
     "Parid Kuci",
     "Claudio Lorusso",
@@ -28,6 +29,15 @@ MITARBEITER_INITIAL = [
     "Giuseppe Pilato",
     "Mihaela Plesa",
     "Ana-Maria Rus",
+    # Ehemalige (können im Admin deaktiviert werden)
+    "Ayad Ashraf Mahmoud Abdelghafar",
+    "Anand Aditya Bhatt",
+    "Salvatore Coluccio",
+    "Jerome Gangabada Kanamge",
+    "Georgiana Madalina Guta",
+    "Obada Ioana-Veronica",
+    "Achref Kadri",
+    "Lennart Kramer",
 ]
 
 # ── Datenbank ───────────────────────────────────────────────────────────────
