@@ -18,7 +18,10 @@ body{background:#F0F4F8}
 <div class="header">
   <div class="container-fluid d-flex justify-content-between align-items-center">
     <h5 class="mb-0">🍽️ DaTino Admin – Stunden</h5>
-    <a href="{{ url_for('admin_logout') }}" class="btn btn-outline-light btn-sm">Abmelden</a>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('admin_mitarbeiter') }}" class="btn btn-outline-light btn-sm">👥 Mitarbeiter</a>
+      <a href="{{ url_for('admin_logout') }}" class="btn btn-outline-light btn-sm">Abmelden</a>
+    </div>
   </div>
 </div>
 
@@ -102,7 +105,7 @@ body{background:#F0F4F8}
       <tr>
         <th>Name</th><th>Datum</th><th>Tag</th>
         <th>Beginn</th><th>Ende</th><th>Pause</th>
-        <th>Netto-Std</th><th>Bemerkungen</th><th>Löschen</th>
+        <th>Netto-Std</th><th>Bemerkungen</th><th>Aktionen</th>
       </tr>
     </thead>
     <tbody>
@@ -125,10 +128,14 @@ body{background:#F0F4F8}
         {% endif %}
       </td>
       <td>
-        <form method="POST" action="{{ url_for('admin_delete', eid=e.id) }}"
-              onsubmit="return confirm('Eintrag löschen?')">
-          <button type="submit" class="btn btn-outline-danger btn-sm">🗑</button>
-        </form>
+        <div class="d-flex gap-1">
+          <a href="{{ url_for('admin_edit', eid=e.id) }}"
+             class="btn btn-outline-primary btn-sm">✏️</a>
+          <form method="POST" action="{{ url_for('admin_delete', eid=e.id) }}"
+                onsubmit="return confirm('Eintrag löschen?')">
+            <button type="submit" class="btn btn-outline-danger btn-sm">🗑</button>
+          </form>
+        </div>
       </td>
     </tr>
     {% endfor %}
