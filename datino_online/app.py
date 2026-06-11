@@ -15,7 +15,8 @@ ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'datino2026')
 DB_PATH = os.environ.get('DB_PATH', 'stunden.db')
 
 # ── Mitarbeiter-Liste ───────────────────────────────────────────────────────
-MITARBEITER = [
+# Initiale Mitarbeiter-Liste (wird nur beim ersten Start in DB geschrieben)
+MITARBEITER_INITIAL = [
     "Anxhela Kuci",
     "Parid Kuci",
     "Claudio Lorusso",
@@ -47,9 +48,28 @@ def init_db():
             bemerkungen TEXT    DEFAULT '',
             erstellt_am TEXT    DEFAULT (datetime('now','localtime'))
         )''')
+        conn.execute('''CREATE TABLE IF NOT EXISTS mitarbeiter (
+            id      INTEGER PRIMARY KEY AUTOINCREMENT,
+            name    TEXT    NOT NULL UNIQUE,
+            aktiv   INTEGER DEFAULT 1
+        )''')
+        # Initiale Namen einfügen (nur wenn noch keine vorhanden)
+        count = conn.execute('SELECT COUNT(*) FROM mitarbeiter').fetchone()[0]
+        if count == 0:
+            for name in MITARBEITER_INITIAL:
+                conn.execute('INSERT OR IGNORE INTO mitarbeiter (name) VALUES (?)', (name,))
         conn.commit()
 
 init_db()
+
+def get_mitarbeiter():
+    """Mitarbeiter aus DB, nach Nachname sortiert."""
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT name FROM mitarbeiter WHERE aktiv=1 ORDER BY "
+            "LOWER(TRIM(SUBSTR(name, INSTR(name,' ')+1)))"
+        ).fetchall()
+    return [r[0] for r in rows]
 
 def netto_stunden(beginn, ende, pause_min):
     try:
@@ -90,7 +110,7 @@ def eingabe():
 
     today = date.today().isoformat()
     return render_template('eingabe.html',
-                           mitarbeiter=MITARBEITER,
+                           mitarbeiter=get_mitarbeiter(),
                            today=today,
                            success=success,
                            error=error)
@@ -153,7 +173,7 @@ def admin_dashboard():
                            gesamt=gesamt,
                            monat=monat,
                            name_filter=name,
-                           mitarbeiter=MITARBEITER,
+                           mitarbeiter=get_mitarbeiter(),
                            monate=monate)
 
 # ── Admin: Eintrag bearbeiten ─────────────────────────────────────────────────
@@ -181,7 +201,7 @@ def admin_edit(eid):
             conn.commit()
         flash('✅ Eintrag aktualisiert.')
         return redirect(url_for('admin_dashboard'))
-    return render_template('admin_edit.html', e=dict(eintrag), mitarbeiter=MITARBEITER)
+    return render_template('admin_edit.html', e=dict(eintrag), mitarbeiter=get_mitarbeiter())
 
 # ── Admin: Eintrag löschen ────────────────────────────────────────────────────
 @app.route('/admin/delete/<int:eid>', methods=['POST'])
@@ -193,6 +213,44 @@ def admin_delete(eid):
         conn.commit()
     flash('Eintrag gelöscht.')
     return redirect(request.referrer or url_for('admin_dashboard'))
+
+# ── Admin: Mitarbeiter verwalten ─────────────────────────────────────────────
+@app.route('/admin/mitarbeiter', methods=['GET', 'POST'])
+def admin_mitarbeiter():
+    if not session.get('admin'):
+        return redirect(url_for('admin_login'))
+    if request.method == 'POST':
+        aktion = request.form.get('aktion')
+        if aktion == 'add':
+            name = request.form.get('name', '').strip()
+            if name:
+                with get_db() as conn:
+                    try:
+                        conn.execute('INSERT INTO mitarbeiter (name) VALUES (?)', (name,))
+                        conn.commit()
+                        flash(f'✅ {name} hinzugefügt.')
+                    except Exception:
+                        flash(f'⚠️ {name} existiert bereits.')
+        elif aktion == 'toggle':
+            mid = request.form.get('mid')
+            with get_db() as conn:
+                conn.execute('UPDATE mitarbeiter SET aktiv = 1-aktiv WHERE id=?', (mid,))
+                conn.commit()
+            flash('Mitarbeiter aktualisiert.')
+        elif aktion == 'delete':
+            mid = request.form.get('mid')
+            with get_db() as conn:
+                conn.execute('DELETE FROM mitarbeiter WHERE id=?', (mid,))
+                conn.commit()
+            flash('Mitarbeiter gelöscht.')
+        return redirect(url_for('admin_mitarbeiter'))
+
+    with get_db() as conn:
+        alle = conn.execute(
+            "SELECT * FROM mitarbeiter ORDER BY "
+            "LOWER(TRIM(SUBSTR(name, INSTR(name,' ')+1)))"
+        ).fetchall()
+    return render_template('admin_mitarbeiter.html', mitarbeiter=alle)
 
 # ── Admin: Excel-Export (Stundenliste) ────────────────────────────────────────
 @app.route('/admin/export')

@@ -18,7 +18,10 @@ body{background:#F0F4F8}
 <div class="header">
   <div class="container-fluid d-flex justify-content-between align-items-center">
     <h5 class="mb-0">🍽️ DaTino Admin – Stunden</h5>
-    <a href="{{ url_for('admin_logout') }}" class="btn btn-outline-light btn-sm">Abmelden</a>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('admin_mitarbeiter') }}" class="btn btn-outline-light btn-sm">👥 Mitarbeiter</a>
+      <a href="{{ url_for('admin_logout') }}" class="btn btn-outline-light btn-sm">Abmelden</a>
+    </div>
   </div>
 </div>
 
