@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DaTino – Stunden eintragen</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+body{background:#F0F4F8;font-family:'Segoe UI',Arial,sans-serif}
+.header{background:#1A3A5C;color:#fff;padding:18px 0;text-align:center;margin-bottom:30px}
+.card{border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.1)}
+.btn-primary{background:#1A3A5C;border-color:#1A3A5C}
+.btn-primary:hover{background:#2E6DA4;border-color:#2E6DA4}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1 class="h4 mb-0">🍽️ DaTino Ristobar</h1>
+  <div class="small opacity-75">Stunden eintragen</div>
+</div>
+
+<div class="container" style="max-width:520px">
+
+{% if success %}
+<div class="alert alert-success alert-dismissible fade show" role="alert">
+  {{ success }}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+{% if error %}
+<div class="alert alert-danger">{{ error }}</div>
+{% endif %}
+
+<div class="card p-4">
+  <h5 class="mb-4 text-center" style="color:#1A3A5C">Schicht eintragen</h5>
+
+  <form method="POST">
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Name *</label>
+      <select name="name" class="form-select" required>
+        <option value="">– Name auswählen –</option>
+        {% for m in mitarbeiter %}
+        <option value="{{ m }}">{{ m }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Datum *</label>
+      <input type="date" name="datum" class="form-control"
+             value="{{ today }}" required>
+    </div>
+
+    <div class="row g-2 mb-3">
+      <div class="col">
+        <label class="form-label fw-semibold">Beginn *</label>
+        <input type="time" name="beginn" class="form-control" required>
+      </div>
+      <div class="col">
+        <label class="form-label fw-semibold">Ende *</label>
+        <input type="time" name="ende" class="form-control" required>
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Pause</label>
+      <div class="input-group">
+        <input type="number" name="pause_min" class="form-control"
+               value="0" min="0" max="180" step="5">
+        <span class="input-group-text">Minuten</span>
+      </div>
+      <div class="form-text">30 Min bei Schicht &gt;6h, 45 Min bei &gt;9h</div>
+    </div>
+
+    <div class="mb-4">
+      <label class="form-label fw-semibold">Bemerkungen</label>
+      <input type="text" name="bemerkungen" class="form-control"
+             placeholder="z.B. Krank, Feiertag, Urlaub ...">
+    </div>
+
+    <button type="submit" class="btn btn-primary w-100 py-2 fw-bold">
+      ✅ Eintrag speichern
+    </button>
+  </form>
+</div>
+
+<div class="text-center mt-3 text-muted small">
+  DaTino Ristobar · Gesandtenstraße 18, 93047 Regensburg
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// Pause auto-berechnen
+document.querySelector('[name=beginn]').addEventListener('change', calcPause);
+document.querySelector('[name=ende]').addEventListener('change', calcPause);
+function calcPause() {
+  const b = document.querySelector('[name=beginn]').value;
+  const e = document.querySelector('[name=ende]').value;
+  if (!b || !e) return;
+  let bMin = parseInt(b.split(':')[0])*60+parseInt(b.split(':')[1]);
+  let eMin = parseInt(e.split(':')[0])*60+parseInt(e.split(':')[1]);
+  if (eMin <= bMin) eMin += 24*60;
+  const span = eMin - bMin;
+  const p = document.querySelector('[name=pause_min]');
+  if (span > 9*60)      p.value = 45;
+  else if (span > 6*60) p.value = 30;
+  else                  p.value = 0;
+}
+</script>
+</body>
+</html>
