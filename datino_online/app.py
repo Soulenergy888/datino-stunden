@@ -16,10 +16,17 @@ DB_PATH = os.environ.get('DB_PATH', 'stunden.db')
 
 # ── Mitarbeiter-Liste ───────────────────────────────────────────────────────
 MITARBEITER = [
-    "Arand", "Anxhela Kuci", "Claudio Dorozzo", "DPAGO",
-    "George Pavel", "Hector Luis", "Kuci Parid", "Max McShein",
-    "Plesa Michaela", "Salvatore", "Salvatore Colucci", "Veronica",
-    "Ana Rus", "Ache",
+    "Anxhela Kuci",
+    "Parid Kuci",
+    "Claudio Lorusso",
+    "Alice Lumia",
+    "Gayendra Kalhara Mcshane",
+    "Hector Luis Nunez Pablo",
+    "George Pavel",
+    "Salvatore Petraroli",
+    "Giuseppe Pilato",
+    "Mihaela Plesa",
+    "Ana-Maria Rus",
 ]
 
 # ── Datenbank ───────────────────────────────────────────────────────────────
@@ -148,6 +155,33 @@ def admin_dashboard():
                            name_filter=name,
                            mitarbeiter=MITARBEITER,
                            monate=monate)
+
+# ── Admin: Eintrag bearbeiten ─────────────────────────────────────────────────
+@app.route('/admin/edit/<int:eid>', methods=['GET', 'POST'])
+def admin_edit(eid):
+    if not session.get('admin'):
+        return redirect(url_for('admin_login'))
+    with get_db() as conn:
+        eintrag = conn.execute('SELECT * FROM eintraege WHERE id=?', (eid,)).fetchone()
+    if not eintrag:
+        flash('Eintrag nicht gefunden.')
+        return redirect(url_for('admin_dashboard'))
+    if request.method == 'POST':
+        name      = request.form.get('name', '').strip()
+        datum     = request.form.get('datum', '')
+        beginn    = request.form.get('beginn', '')
+        ende      = request.form.get('ende', '')
+        pause_min = int(request.form.get('pause_min', 0) or 0)
+        bemerk    = request.form.get('bemerkungen', '').strip()
+        with get_db() as conn:
+            conn.execute(
+                'UPDATE eintraege SET name=?,datum=?,beginn=?,ende=?,pause_min=?,bemerkungen=? WHERE id=?',
+                (name, datum, beginn, ende, pause_min, bemerk, eid)
+            )
+            conn.commit()
+        flash('✅ Eintrag aktualisiert.')
+        return redirect(url_for('admin_dashboard'))
+    return render_template('admin_edit.html', e=dict(eintrag), mitarbeiter=MITARBEITER)
 
 # ── Admin: Eintrag löschen ────────────────────────────────────────────────────
 @app.route('/admin/delete/<int:eid>', methods=['POST'])

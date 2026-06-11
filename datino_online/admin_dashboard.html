@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DaTino Admin – Dashboard</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+body{background:#F0F4F8}
+.header{background:#1A3A5C;color:#fff;padding:14px 0}
+.table th{background:#1A3A5C;color:#fff;white-space:nowrap}
+.badge-so{background:#8e44ad}
+.badge-sa{background:#2471a3}
+.badge-ft{background:#c0392b}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="container-fluid d-flex justify-content-between align-items-center">
+    <h5 class="mb-0">🍽️ DaTino Admin – Stunden</h5>
+    <a href="{{ url_for('admin_logout') }}" class="btn btn-outline-light btn-sm">Abmelden</a>
+  </div>
+</div>
+
+<div class="container-fluid mt-4">
+
+{% with msgs = get_flashed_messages() %}
+  {% if msgs %}<div class="alert alert-info">{{ msgs[0] }}</div>{% endif %}
+{% endwith %}
+
+<!-- Filter -->
+<div class="card p-3 mb-4">
+  <form method="GET" class="row g-2 align-items-end">
+    <div class="col-auto">
+      <label class="form-label fw-semibold mb-1">Monat</label>
+      <select name="monat" class="form-select form-select-sm">
+        {% for m in monate %}
+        <option value="{{ m }}" {% if m==monat %}selected{% endif %}>{{ m }}</option>
+        {% endfor %}
+        {% if monat not in monate %}
+        <option value="{{ monat }}" selected>{{ monat }}</option>
+        {% endif %}
+      </select>
+    </div>
+    <div class="col-auto">
+      <label class="form-label fw-semibold mb-1">Mitarbeiter</label>
+      <select name="name" class="form-select form-select-sm">
+        <option value="">Alle</option>
+        {% for m in mitarbeiter %}
+        <option value="{{ m }}" {% if m==name_filter %}selected{% endif %}>{{ m }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-auto">
+      <button type="submit" class="btn btn-primary btn-sm">Filtern</button>
+    </div>
+    <div class="col-auto ms-auto">
+      <a href="{{ url_for('admin_export', monat=monat, name=name_filter) }}"
+         class="btn btn-success btn-sm">📥 Excel exportieren</a>
+    </div>
+  </form>
+</div>
+
+<!-- Zusammenfassung -->
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card text-center p-3">
+      <div class="h3 text-primary fw-bold">{{ eintraege|length }}</div>
+      <div class="text-muted small">Einträge</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center p-3">
+      <div class="h3 text-success fw-bold">{{ gesamt }}</div>
+      <div class="text-muted small">Gesamtstunden</div>
+    </div>
+  </div>
+  {% if not name_filter %}
+  <div class="col-md-6">
+    <div class="card p-3">
+      <div class="small fw-bold text-muted mb-1">Stunden pro Mitarbeiter</div>
+      {% set ns = namespace(prev='') %}
+      {% for e in eintraege %}
+        {% if e.name != ns.prev %}
+          {% set ns.prev = e.name %}
+          <span class="badge bg-secondary me-1">
+            {{ e.name }}:
+            {{ eintraege|selectattr('name','equalto',e.name)|sum(attribute='netto')|round(2) }}h
+          </span>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Tabelle -->
+{% if eintraege %}
+<div class="table-responsive">
+  <table class="table table-hover table-bordered bg-white rounded shadow-sm">
+    <thead>
+      <tr>
+        <th>Name</th><th>Datum</th><th>Tag</th>
+        <th>Beginn</th><th>Ende</th><th>Pause</th>
+        <th>Netto-Std</th><th>Bemerkungen</th><th>Aktionen</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% set wochentage = ['Mo','Di','Mi','Do','Fr','Sa','So'] %}
+    {% for e in eintraege %}
+    <tr>
+      <td>{{ e.name }}</td>
+      <td>{{ e.datum }}</td>
+      <td>
+        {% set d = e.datum|string %}
+        {{ e.datum }}
+      </td>
+      <td>{{ e.beginn }}</td>
+      <td>{{ e.ende }}</td>
+      <td>{{ e.pause_min }} Min</td>
+      <td class="fw-bold">{{ e.netto }} h</td>
+      <td>
+        {% if e.bemerkungen %}
+          <span class="badge bg-secondary">{{ e.bemerkungen }}</span>
+        {% endif %}
+      </td>
+      <td>
+        <div class="d-flex gap-1">
+          <a href="{{ url_for('admin_edit', eid=e.id) }}"
+             class="btn btn-outline-primary btn-sm">✏️</a>
+          <form method="POST" action="{{ url_for('admin_delete', eid=e.id) }}"
+                onsubmit="return confirm('Eintrag löschen?')">
+            <button type="submit" class="btn btn-outline-danger btn-sm">🗑</button>
+          </form>
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr class="table-dark">
+        <td colspan="6" class="text-end fw-bold">Gesamt:</td>
+        <td class="fw-bold">{{ gesamt }} h</td>
+        <td colspan="2"></td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+{% else %}
+<div class="alert alert-info">Keine Einträge für den ausgewählten Zeitraum.</div>
+{% endif %}
+
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
