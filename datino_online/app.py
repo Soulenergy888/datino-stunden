@@ -131,6 +131,16 @@ def get_mitarbeiter():
     finally:
         conn.close()
 
+def runde_viertelstunde(zeit):
+    """Rundet 'HH:MM' auf die nächste Viertelstunde (00/15/30/45)."""
+    try:
+        h, m = map(int, zeit.split(':'))
+        total = round((h*60 + m) / 15) * 15
+        total %= 24*60
+        return f'{total//60:02d}:{total%60:02d}'
+    except Exception:
+        return zeit
+
 def netto_stunden(beginn, ende, pause_min):
     try:
         b = datetime.strptime(beginn, '%H:%M')
@@ -154,6 +164,8 @@ def eingabe():
         if not all([name,datum,beginn,ende]):
             error = 'Bitte alle Pflichtfelder ausfüllen.'
         else:
+            beginn = runde_viertelstunde(beginn)
+            ende   = runde_viertelstunde(ende)
             conn = get_db()
             try:
                 db_execute(conn,
@@ -225,7 +237,8 @@ def admin_edit(eid):
             db_execute(conn,
                 'UPDATE eintraege SET name=?,datum=?,beginn=?,ende=?,pause_min=?,bemerkungen=? WHERE id=?',
                 (request.form.get('name'), request.form.get('datum'),
-                 request.form.get('beginn'), request.form.get('ende'),
+                 runde_viertelstunde(request.form.get('beginn','')),
+                 runde_viertelstunde(request.form.get('ende','')),
                  int(request.form.get('pause_min',0) or 0),
                  request.form.get('bemerkungen',''), eid))
             flash('✅ Gespeichert.')
@@ -302,6 +315,16 @@ def admin_export():
             conn.close()
 
         wb = openpyxl.Workbook(); ws = wb.active; ws.title='Stunden'
+        # Druck: A4 Hochformat, alles auf 1 Seite skalieren (Breite UND Höhe)
+        from openpyxl.worksheet.properties import PageSetupProperties
+        ws.page_setup.orientation = 'portrait'
+        ws.page_setup.paperSize   = ws.PAPERSIZE_A4
+        ws.page_setup.fitToWidth  = 1
+        ws.page_setup.fitToHeight = 1
+        ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
+        ws.page_margins.left = ws.page_margins.right = 0.4
+        ws.page_margins.top  = ws.page_margins.bottom = 0.5
+        ws.print_options.horizontalCentered = True
         monat_name = datetime.strptime(monat+'-01','%Y-%m-%d').strftime('%B %Y')
         ws['A1'] = f'DaTino Ristobar – Stunden {monat_name}' + (f' – {name}' if name else '')
         ws['A1'].font = Font(bold=True, size=13)
