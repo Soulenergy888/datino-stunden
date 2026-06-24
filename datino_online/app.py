@@ -314,46 +314,111 @@ def admin_export():
         finally:
             conn.close()
 
-        wb = openpyxl.Workbook(); ws = wb.active; ws.title='Stunden'
-        # Druck: A4 Hochformat, alles auf 1 Seite skalieren (Breite UND Höhe)
         from openpyxl.worksheet.properties import PageSetupProperties
-        ws.page_setup.orientation = 'portrait'
-        ws.page_setup.paperSize   = ws.PAPERSIZE_A4
-        ws.page_setup.fitToWidth  = 1
-        ws.page_setup.fitToHeight = 1
-        ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
-        ws.page_margins.left = ws.page_margins.right = 0.4
-        ws.page_margins.top  = ws.page_margins.bottom = 0.5
-        ws.print_options.horizontalCentered = True
-        monat_name = datetime.strptime(monat+'-01','%Y-%m-%d').strftime('%B %Y')
-        ws['A1'] = f'DaTino Ristobar – Stunden {monat_name}' + (f' – {name}' if name else '')
-        ws['A1'].font = Font(bold=True, size=13)
-        ws.merge_cells('A1:H1')
-        headers = ['Name','Datum','Tag','Beginn','Ende','Pause (Min)','Netto-Std','Bemerkungen']
+        from openpyxl.styles import Border, Side
+
         WD = ['Mo','Di','Mi','Do','Fr','Sa','So']
-        for col,h in enumerate(headers,1):
-            c = ws.cell(row=3,column=col,value=h)
-            c.font = Font(bold=True,color='FFFFFF')
-            c.fill = PatternFill('solid',fgColor='1A3A5C')
-            c.alignment = Alignment(horizontal='center')
-        gesamt = 0
-        for i,r in enumerate(rows,4):
-            netto = netto_stunden(r['beginn'],r['ende'],r['pause_min'])
-            gesamt += netto
-            d = datetime.strptime(r['datum'],'%Y-%m-%d')
-            ws.cell(row=i,column=1,value=r['name'])
-            ws.cell(row=i,column=2,value=d.strftime('%d.%m.%Y'))
-            ws.cell(row=i,column=3,value=WD[d.weekday()])
-            ws.cell(row=i,column=4,value=r['beginn'])
-            ws.cell(row=i,column=5,value=r['ende'])
-            ws.cell(row=i,column=6,value=r['pause_min'])
-            ws.cell(row=i,column=7,value=round(netto,2))
-            ws.cell(row=i,column=8,value=r.get('bemerkungen','') or '')
-        row_sum = len(rows)+4
-        ws.cell(row=row_sum+1,column=6,value='Gesamt:').font=Font(bold=True)
-        ws.cell(row=row_sum+1,column=7,value=round(gesamt,2)).font=Font(bold=True)
-        for col,w in zip('ABCDEFGH',[22,14,6,8,8,12,12,25]):
-            ws.column_dimensions[col].width=w
+        MONATE = ['','Januar','Februar','März','April','Mai','Juni','Juli',
+                  'August','September','Oktober','November','Dezember']
+        jahr, mon = int(monat[:4]), int(monat[5:7])
+        monat_name = f'{MONATE[mon]} {jahr}'
+
+        def fmt_aufz(v):
+            if isinstance(v, datetime): return v.strftime('%d.%m.%Y')
+            s = str(v or '')[:10]
+            try:    return datetime.strptime(s,'%Y-%m-%d').strftime('%d.%m.%Y')
+            except Exception: return s
+
+        # Einträge nach Mitarbeiter gruppieren
+        von_mitarbeiter = {}
+        for r in rows:
+            von_mitarbeiter.setdefault(r['name'], []).append(r)
+        if name:
+            namen = [name]
+        else:
+            namen = sorted(von_mitarbeiter.keys(),
+                           key=lambda n: n.split(' ')[-1].lower()) or ['Alle']
+
+        thin = Side(style='thin', color='999999')
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        kopf_fill = PatternFill('solid', fgColor='1A3A5C')
+
+        wb = openpyxl.Workbook()
+        wb.remove(wb.active)
+        headers = ['Kalendertag','Beginn','Pause','Ende','Dauer (Std)','aufgezeichnet am','Bemerkungen']
+
+        for mitarbeiter_name in namen:
+            titel = (mitarbeiter_name or 'Blatt')[:28].replace('/', '-').replace('\\','-')
+            ws = wb.create_sheet(title=titel or 'Blatt')
+            # Seite: A4 Hochformat, alles auf 1 Seite
+            ws.page_setup.orientation = 'portrait'
+            ws.page_setup.paperSize   = ws.PAPERSIZE_A4
+            ws.page_setup.fitToWidth  = 1
+            ws.page_setup.fitToHeight = 1
+            ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
+            ws.page_margins.left = ws.page_margins.right = 0.4
+            ws.page_margins.top  = ws.page_margins.bottom = 0.5
+            ws.print_options.horizontalCentered = True
+
+            # Kopfbereich
+            ws.merge_cells('A1:G1')
+            ws['A1'] = 'Dokumentation der täglichen Arbeitszeit'
+            ws['A1'].font = Font(bold=True, size=13)
+            ws['A1'].alignment = Alignment(horizontal='center')
+            ws['A3'] = 'Firma:'; ws['A3'].font = Font(bold=True)
+            ws.merge_cells('B3:G3'); ws['B3'] = 'Ristobar DaTino · Gesandtenstraße 18, 93047 Regensburg'
+            ws['A4'] = 'Name des Mitarbeiters:'; ws['A4'].font = Font(bold=True)
+            ws.merge_cells('B4:D4'); ws['B4'] = mitarbeiter_name
+            ws['E4'] = 'Pers.-Nr.:'; ws['E4'].font = Font(bold=True)
+            ws.merge_cells('F4:G4')
+            ws['A5'] = 'Monat/Jahr:'; ws['A5'].font = Font(bold=True)
+            ws.merge_cells('B5:G5'); ws['B5'] = monat_name
+
+            # Tabellenkopf (Zeile 7)
+            for col,h in enumerate(headers,1):
+                c = ws.cell(row=7,column=col,value=h)
+                c.font = Font(bold=True,color='FFFFFF')
+                c.fill = kopf_fill
+                c.alignment = Alignment(horizontal='center', wrap_text=True)
+                c.border = border
+
+            # Datenzeilen (eine pro Eintrag)
+            eintr = sorted(von_mitarbeiter.get(mitarbeiter_name, []),
+                           key=lambda r: (r['datum'], r['beginn']))
+            gesamt = 0; zeile = 8
+            for r in eintr:
+                netto = netto_stunden(r['beginn'],r['ende'],r['pause_min'])
+                gesamt += netto
+                try:    d = datetime.strptime(r['datum'],'%Y-%m-%d')
+                except Exception: d = None
+                pmin = r['pause_min'] or 0
+                werte = [
+                    f'{WD[d.weekday()]}. {d.day:02d}' if d else r['datum'],
+                    r['beginn'], f'{pmin//60}:{pmin%60:02d}', r['ende'],
+                    round(netto,2), fmt_aufz(r.get('erstellt_am')),
+                    r.get('bemerkungen','') or '',
+                ]
+                for col,v in enumerate(werte,1):
+                    c = ws.cell(row=zeile,column=col,value=v)
+                    c.border = border
+                    if col in (1,2,3,4,5): c.alignment = Alignment(horizontal='center')
+                zeile += 1
+
+            # Summenzeile
+            ws.merge_cells(start_row=zeile,start_column=1,end_row=zeile,end_column=4)
+            cs = ws.cell(row=zeile,column=1,value='Summe:')
+            cs.font = Font(bold=True); cs.alignment = Alignment(horizontal='right')
+            cg = ws.cell(row=zeile,column=5,value=round(gesamt,2))
+            cg.font = Font(bold=True); cg.alignment = Alignment(horizontal='center')
+            for col in range(1,8):
+                ws.cell(row=zeile,column=col).border = border
+
+            for col,w in zip('ABCDEFG',[13,9,8,9,11,15,26]):
+                ws.column_dimensions[col].width = w
+
+        if not wb.sheetnames:
+            wb.create_sheet(title='Leer')
+
         buf = io.BytesIO(); wb.save(buf); buf.seek(0)
         fname = f'DaTino_Stunden_{monat}{"_"+name.replace(" ","_") if name else ""}.xlsx'
         return send_file(buf,as_attachment=True,download_name=fname,
