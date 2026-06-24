@@ -54,11 +54,21 @@ body{background:#F0F4F8;font-family:'Segoe UI',Arial,sans-serif}
     <div class="row g-2 mb-3">
       <div class="col">
         <label class="form-label fw-semibold">Beginn *</label>
-        <input type="time" name="beginn" class="form-control" required>
+        <select name="beginn" class="form-select" required>
+          <option value="">– Uhrzeit –</option>
+          {% for h in range(0,24) %}{% for mm in ['00','15','30','45'] %}
+          <option value="{{ '%02d'|format(h) }}:{{ mm }}">{{ '%02d'|format(h) }}:{{ mm }}</option>
+          {% endfor %}{% endfor %}
+        </select>
       </div>
       <div class="col">
         <label class="form-label fw-semibold">Ende *</label>
-        <input type="time" name="ende" class="form-control" required>
+        <select name="ende" class="form-select" required>
+          <option value="">– Uhrzeit –</option>
+          {% for h in range(0,24) %}{% for mm in ['00','15','30','45'] %}
+          <option value="{{ '%02d'|format(h) }}:{{ mm }}">{{ '%02d'|format(h) }}:{{ mm }}</option>
+          {% endfor %}{% endfor %}
+        </select>
       </div>
     </div>
 
