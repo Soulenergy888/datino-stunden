@@ -345,7 +345,12 @@ def admin_export():
 
         wb = openpyxl.Workbook()
         wb.remove(wb.active)
-        headers = ['Kalendertag','Beginn','Pause','Ende','Dauer (Std)','aufgezeichnet am','Bemerkungen']
+        headers = ['Kalendertag','Beginn','Pause','Ende','Dauer (Std:Min)','Dezimal','aufgezeichnet am','Bemerkungen']
+
+        def std_min(dezimal):
+            """9.58 -> '9:35'"""
+            m = int(round(dezimal*60))
+            return f'{m//60}:{m%60:02d}'
 
         for mitarbeiter_name in namen:
             titel = (mitarbeiter_name or 'Blatt')[:28].replace('/', '-').replace('\\','-')
@@ -361,18 +366,18 @@ def admin_export():
             ws.print_options.horizontalCentered = True
 
             # Kopfbereich
-            ws.merge_cells('A1:G1')
+            ws.merge_cells('A1:H1')
             ws['A1'] = 'Dokumentation der täglichen Arbeitszeit'
             ws['A1'].font = Font(bold=True, size=13)
             ws['A1'].alignment = Alignment(horizontal='center')
             ws['A3'] = 'Firma:'; ws['A3'].font = Font(bold=True)
-            ws.merge_cells('B3:G3'); ws['B3'] = 'Ristobar DaTino · Gesandtenstraße 18, 93047 Regensburg'
+            ws.merge_cells('B3:H3'); ws['B3'] = 'Ristobar DaTino · Gesandtenstraße 18, 93047 Regensburg'
             ws['A4'] = 'Name des Mitarbeiters:'; ws['A4'].font = Font(bold=True)
             ws.merge_cells('B4:D4'); ws['B4'] = mitarbeiter_name
             ws['E4'] = 'Pers.-Nr.:'; ws['E4'].font = Font(bold=True)
-            ws.merge_cells('F4:G4')
+            ws.merge_cells('F4:H4')
             ws['A5'] = 'Monat/Jahr:'; ws['A5'].font = Font(bold=True)
-            ws.merge_cells('B5:G5'); ws['B5'] = monat_name
+            ws.merge_cells('B5:H5'); ws['B5'] = monat_name
 
             # Tabellenkopf (Zeile 7)
             for col,h in enumerate(headers,1):
@@ -395,25 +400,27 @@ def admin_export():
                 werte = [
                     f'{WD[d.weekday()]}. {d.day:02d}' if d else r['datum'],
                     r['beginn'], f'{pmin//60}:{pmin%60:02d}', r['ende'],
-                    round(netto,2), fmt_aufz(r.get('erstellt_am')),
+                    std_min(netto), round(netto,2), fmt_aufz(r.get('erstellt_am')),
                     r.get('bemerkungen','') or '',
                 ]
                 for col,v in enumerate(werte,1):
                     c = ws.cell(row=zeile,column=col,value=v)
                     c.border = border
-                    if col in (1,2,3,4,5): c.alignment = Alignment(horizontal='center')
+                    if col in (1,2,3,4,5,6): c.alignment = Alignment(horizontal='center')
                 zeile += 1
 
             # Summenzeile
             ws.merge_cells(start_row=zeile,start_column=1,end_row=zeile,end_column=4)
             cs = ws.cell(row=zeile,column=1,value='Summe:')
             cs.font = Font(bold=True); cs.alignment = Alignment(horizontal='right')
-            cg = ws.cell(row=zeile,column=5,value=round(gesamt,2))
+            ch = ws.cell(row=zeile,column=5,value=std_min(gesamt))
+            ch.font = Font(bold=True); ch.alignment = Alignment(horizontal='center')
+            cg = ws.cell(row=zeile,column=6,value=round(gesamt,2))
             cg.font = Font(bold=True); cg.alignment = Alignment(horizontal='center')
-            for col in range(1,8):
+            for col in range(1,9):
                 ws.cell(row=zeile,column=col).border = border
 
-            for col,w in zip('ABCDEFG',[13,9,8,9,11,15,26]):
+            for col,w in zip('ABCDEFGH',[13,9,8,9,12,9,15,24]):
                 ws.column_dimensions[col].width = w
 
         if not wb.sheetnames:
