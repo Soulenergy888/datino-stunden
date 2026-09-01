@@ -213,9 +213,9 @@ def admin_dashboard():
                 (von,bis))
         monate = [r['substr'] if 'substr' in r else list(r.values())[0]
                   for r in db_fetchall(conn,
-                    "SELECT DISTINCT SUBSTRING(datum,1,7) as substr FROM eintraege ORDER BY datum DESC"
+                    "SELECT DISTINCT SUBSTRING(datum,1,7) as substr FROM eintraege ORDER BY substr DESC"
                     if USE_PG else
-                    "SELECT DISTINCT substr(datum,1,7) as substr FROM eintraege ORDER BY datum DESC")]
+                    "SELECT DISTINCT substr(datum,1,7) as substr FROM eintraege ORDER BY substr DESC")]
     finally:
         conn.close()
     eintraege = [{**r, 'netto': netto_stunden(r['beginn'],r['ende'],r['pause_min'])} for r in rows]
