@@ -403,7 +403,6 @@ def admin_export():
             for r in eintr:
                 pro_tag.setdefault(str(r['datum'])[:10], []).append(r)
 
-            gesamt = 0
             for day in range(1, 32):
                 zeile = day + 7                     # Tag 1 -> Zeile 8
                 for col in range(1,9):
@@ -413,6 +412,15 @@ def admin_export():
                 if day > tage_im_monat: continue
                 d = date(jahr, mon, day)
                 ws.cell(row=zeile,column=1,value=f'{WD[d.weekday()]}. {day:02d}')
+                # Formeln: Dauer & Dezimal rechnen automatisch nach, wenn
+                # Beginn/Pause/Ende in Excel geändert oder ergänzt werden
+                z = zeile
+                cE = ws.cell(row=z,column=5,value=(
+                    f'=IF(OR(B{z}="",D{z}=""),"",'
+                    f'IF(D{z}<B{z},D{z}+1-B{z},D{z}-B{z})-C{z})'))
+                cE.number_format = 'h:mm'
+                cH = ws.cell(row=z,column=8,value=f'=IF(E{z}="","",ROUND(E{z}*24,2))')
+                cH.number_format = '0.00'
                 liste = sorted(pro_tag.get(f'{jahr}-{mon:02d}-{day:02d}', []),
                                key=lambda r: r['beginn'])
                 if not liste: continue
@@ -421,8 +429,6 @@ def admin_export():
                 for prev,nxt in zip(liste, liste[1:]):
                     luecke = mins(nxt['beginn']) - mins(prev['ende'])
                     if luecke > 0: pause += luecke
-                netto = sum(netto_stunden(r['beginn'],r['ende'],r['pause_min']) for r in liste)
-                gesamt += netto
                 bem = ' / '.join(dict.fromkeys(
                     (r.get('bemerkungen') or '').strip()
                     for r in liste if (r.get('bemerkungen') or '').strip()))
@@ -430,18 +436,18 @@ def admin_export():
                 cb = ws.cell(row=zeile,column=2,value=dt_time(bh,bm)); cb.number_format='HH:MM'
                 cp = ws.cell(row=zeile,column=3,value=dt_time(pause//60,pause%60)); cp.number_format='H:MM'
                 ce = ws.cell(row=zeile,column=4,value=dt_time(eh,em)); ce.number_format='HH:MM'
-                ws.cell(row=zeile,column=5,value=std_min(netto))
                 ws.cell(row=zeile,column=6,value=fmt_aufz(liste[0].get('erstellt_am')))
                 ws.cell(row=zeile,column=7,value=bem)
-                ws.cell(row=zeile,column=8,value=round(netto,2))
 
-            # Summenzeile (Zeile 39)
+            # Summenzeile (Zeile 39) – Formeln, rechnen bei Änderungen mit
             ws.merge_cells('A39:D39')
             cs = ws.cell(row=39,column=1,value='Summe:')
             cs.font = Font(bold=True); cs.alignment = Alignment(horizontal='right')
-            ch = ws.cell(row=39,column=5,value=std_min(gesamt))
+            ch = ws.cell(row=39,column=5,value='=SUM(E8:E38)')
+            ch.number_format = '[h]:mm'
             ch.font = Font(bold=True); ch.alignment = Alignment(horizontal='center')
-            cg = ws.cell(row=39,column=8,value=round(gesamt,2))
+            cg = ws.cell(row=39,column=8,value='=ROUND(SUM(H8:H38),2)')
+            cg.number_format = '0.00'
             cg.font = Font(bold=True); cg.alignment = Alignment(horizontal='center')
             for col in range(1,9):
                 ws.cell(row=39,column=col).border = border
