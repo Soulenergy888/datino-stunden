@@ -213,9 +213,9 @@ def admin_dashboard():
                 (von,bis))
         monate = [r['substr'] if 'substr' in r else list(r.values())[0]
                   for r in db_fetchall(conn,
-                    "SELECT DISTINCT SUBSTRING(datum,1,7) as substr FROM eintraege ORDER BY datum DESC"
+                    "SELECT DISTINCT SUBSTRING(datum,1,7) as substr FROM eintraege ORDER BY substr DESC"
                     if USE_PG else
-                    "SELECT DISTINCT substr(datum,1,7) as substr FROM eintraege ORDER BY datum DESC")]
+                    "SELECT DISTINCT substr(datum,1,7) as substr FROM eintraege ORDER BY substr DESC")]
     finally:
         conn.close()
     eintraege = [{**r, 'netto': netto_stunden(r['beginn'],r['ende'],r['pause_min'])} for r in rows]
@@ -343,18 +343,27 @@ def admin_export():
         border = Border(left=thin, right=thin, top=thin, bottom=thin)
         kopf_fill = PatternFill('solid', fgColor='1A3A5C')
 
-        wb = openpyxl.Workbook()
-        wb.remove(wb.active)
-        headers = ['Kalendertag','Beginn','Pause','Ende','Dauer (Std:Min)','Dezimal','aufgezeichnet am','Bemerkungen']
-
         def std_min(dezimal):
             """9.58 -> '9:35'"""
             m = int(round(dezimal*60))
             return f'{m//60}:{m%60:02d}'
 
-        for mitarbeiter_name in namen:
-            titel = (mitarbeiter_name or 'Blatt')[:28].replace('/', '-').replace('\\','-')
-            ws = wb.create_sheet(title=titel or 'Blatt')
+        # Format wie Stundenliste_Monatsvorlage: Blatt 'Stundenliste',
+        # B5 = Datum, Tag 1 -> Zeile 8 ... Tag 31 -> Zeile 38, Summe Zeile 39,
+        # Zeiten als Excel-Zeitwerte, Bemerkungen in Spalte G.
+        # So kann 'DaTino Stundenliste zu EA' die Datei direkt einlesen.
+        import calendar
+        from datetime import time as dt_time
+        headers = ['Kalendertag','Beginn','Pause','Ende','Dauer (Std:Min)',
+                   'aufgezeichnet am','Bemerkungen','Dezimal']
+        tage_im_monat = calendar.monthrange(jahr, mon)[1]
+
+        def mins(t):
+            h,m = map(int, str(t).split(':')); return h*60+m
+
+        def baue_stundenliste(mitarbeiter_name, eintr):
+            wb = openpyxl.Workbook()
+            ws = wb.active; ws.title = 'Stundenliste'
             # Seite: A4 Hochformat, alles auf 1 Seite
             ws.page_setup.orientation = 'portrait'
             ws.page_setup.paperSize   = ws.PAPERSIZE_A4
@@ -377,7 +386,9 @@ def admin_export():
             ws['E4'] = 'Pers.-Nr.:'; ws['E4'].font = Font(bold=True)
             ws.merge_cells('F4:H4')
             ws['A5'] = 'Monat/Jahr:'; ws['A5'].font = Font(bold=True)
-            ws.merge_cells('B5:H5'); ws['B5'] = monat_name
+            ws.merge_cells('B5:H5')
+            ws['B5'] = datetime(jahr, mon, 1)
+            ws['B5'].number_format = 'MMMM YYYY'
 
             # Tabellenkopf (Zeile 7)
             for col,h in enumerate(headers,1):
@@ -387,49 +398,81 @@ def admin_export():
                 c.alignment = Alignment(horizontal='center', wrap_text=True)
                 c.border = border
 
-            # Datenzeilen (eine pro Eintrag)
-            eintr = sorted(von_mitarbeiter.get(mitarbeiter_name, []),
-                           key=lambda r: (r['datum'], r['beginn']))
-            gesamt = 0; zeile = 8
+            # Einträge pro Kalendertag gruppieren (Splitschichten -> eine Zeile)
+            pro_tag = {}
             for r in eintr:
-                netto = netto_stunden(r['beginn'],r['ende'],r['pause_min'])
-                gesamt += netto
-                try:    d = datetime.strptime(r['datum'],'%Y-%m-%d')
-                except Exception: d = None
-                pmin = r['pause_min'] or 0
-                werte = [
-                    f'{WD[d.weekday()]}. {d.day:02d}' if d else r['datum'],
-                    r['beginn'], f'{pmin//60}:{pmin%60:02d}', r['ende'],
-                    std_min(netto), round(netto,2), fmt_aufz(r.get('erstellt_am')),
-                    r.get('bemerkungen','') or '',
-                ]
-                for col,v in enumerate(werte,1):
-                    c = ws.cell(row=zeile,column=col,value=v)
-                    c.border = border
-                    if col in (1,2,3,4,5,6): c.alignment = Alignment(horizontal='center')
-                zeile += 1
+                pro_tag.setdefault(str(r['datum'])[:10], []).append(r)
 
-            # Summenzeile
-            ws.merge_cells(start_row=zeile,start_column=1,end_row=zeile,end_column=4)
-            cs = ws.cell(row=zeile,column=1,value='Summe:')
+            gesamt = 0
+            for day in range(1, 32):
+                zeile = day + 7                     # Tag 1 -> Zeile 8
+                for col in range(1,9):
+                    c = ws.cell(row=zeile,column=col)
+                    c.border = border
+                    if col <= 6: c.alignment = Alignment(horizontal='center')
+                if day > tage_im_monat: continue
+                d = date(jahr, mon, day)
+                ws.cell(row=zeile,column=1,value=f'{WD[d.weekday()]}. {day:02d}')
+                liste = sorted(pro_tag.get(f'{jahr}-{mon:02d}-{day:02d}', []),
+                               key=lambda r: r['beginn'])
+                if not liste: continue
+                beginn = liste[0]['beginn']; ende = liste[-1]['ende']
+                pause  = sum(int(r['pause_min'] or 0) for r in liste)
+                for prev,nxt in zip(liste, liste[1:]):
+                    luecke = mins(nxt['beginn']) - mins(prev['ende'])
+                    if luecke > 0: pause += luecke
+                netto = sum(netto_stunden(r['beginn'],r['ende'],r['pause_min']) for r in liste)
+                gesamt += netto
+                bem = ' / '.join(dict.fromkeys(
+                    (r.get('bemerkungen') or '').strip()
+                    for r in liste if (r.get('bemerkungen') or '').strip()))
+                bh,bm = map(int, beginn.split(':')); eh,em = map(int, ende.split(':'))
+                cb = ws.cell(row=zeile,column=2,value=dt_time(bh,bm)); cb.number_format='HH:MM'
+                cp = ws.cell(row=zeile,column=3,value=dt_time(pause//60,pause%60)); cp.number_format='H:MM'
+                ce = ws.cell(row=zeile,column=4,value=dt_time(eh,em)); ce.number_format='HH:MM'
+                ws.cell(row=zeile,column=5,value=std_min(netto))
+                ws.cell(row=zeile,column=6,value=fmt_aufz(liste[0].get('erstellt_am')))
+                ws.cell(row=zeile,column=7,value=bem)
+                ws.cell(row=zeile,column=8,value=round(netto,2))
+
+            # Summenzeile (Zeile 39)
+            ws.merge_cells('A39:D39')
+            cs = ws.cell(row=39,column=1,value='Summe:')
             cs.font = Font(bold=True); cs.alignment = Alignment(horizontal='right')
-            ch = ws.cell(row=zeile,column=5,value=std_min(gesamt))
+            ch = ws.cell(row=39,column=5,value=std_min(gesamt))
             ch.font = Font(bold=True); ch.alignment = Alignment(horizontal='center')
-            cg = ws.cell(row=zeile,column=6,value=round(gesamt,2))
+            cg = ws.cell(row=39,column=8,value=round(gesamt,2))
             cg.font = Font(bold=True); cg.alignment = Alignment(horizontal='center')
             for col in range(1,9):
-                ws.cell(row=zeile,column=col).border = border
+                ws.cell(row=39,column=col).border = border
 
-            for col,w in zip('ABCDEFGH',[13,9,8,9,12,9,15,24]):
+            for col,w in zip('ABCDEFGH',[11,9,8,9,12,14,20,9]):
                 ws.column_dimensions[col].width = w
+            return wb
 
-        if not wb.sheetnames:
-            wb.create_sheet(title='Leer')
-
-        buf = io.BytesIO(); wb.save(buf); buf.seek(0)
-        fname = f'DaTino_Stunden_{monat}{"_"+name.replace(" ","_") if name else ""}.xlsx'
-        return send_file(buf,as_attachment=True,download_name=fname,
-                        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        if name:
+            # Ein Mitarbeiter -> eine Datei (Blatt 'Stundenliste')
+            wb = baue_stundenliste(name, von_mitarbeiter.get(name, []))
+            buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+            fname = f'{name.replace(" ","_")}_{monat}.xlsx'
+            return send_file(buf,as_attachment=True,download_name=fname,
+                            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        else:
+            # Alle Mitarbeiter -> ZIP mit einer Datei pro Mitarbeiter
+            if not von_mitarbeiter:
+                flash('Keine Einträge für den ausgewählten Monat.')
+                return redirect(url_for('admin_dashboard'))
+            import zipfile
+            zbuf = io.BytesIO()
+            with zipfile.ZipFile(zbuf,'w',zipfile.ZIP_DEFLATED) as zf:
+                for mn in namen:
+                    wb = baue_stundenliste(mn, von_mitarbeiter[mn])
+                    b = io.BytesIO(); wb.save(b)
+                    zf.writestr(f'{mn.replace(" ","_")}.xlsx', b.getvalue())
+            zbuf.seek(0)
+            return send_file(zbuf,as_attachment=True,
+                            download_name=f'DaTino_Stundenlisten_{monat}.zip',
+                            mimetype='application/zip')
     except Exception as e:
         flash(f'Fehler: {e}'); return redirect(url_for('admin_dashboard'))
 
